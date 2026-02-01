@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Download } from 'lucide-react';
-import { Radar } from 'react-chartjs-2';
+import { CheckCircle, AlertTriangle, ChevronDown, ChevronUp, Download, Activity } from 'lucide-react';
+import { Radar, Line } from 'react-chartjs-2';
 import ReactMarkdown from 'react-markdown';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
     Chart as ChartJS,
     RadialLinearScale,
+    CategoryScale,
+    LinearScale,
     PointElement,
     LineElement,
     Filler,
@@ -17,12 +19,64 @@ import {
 
 ChartJS.register(
     RadialLinearScale,
+    CategoryScale,
+    LinearScale,
     PointElement,
     LineElement,
     Filler,
     Tooltip,
     Legend
 );
+
+const PulseChart = ({ timeline }) => {
+    if (!timeline || timeline.length === 0) return null;
+
+    const data = {
+        labels: timeline.map(t => `${t.time}s`),
+        datasets: [
+            {
+                label: 'AI Probability Pulse',
+                data: timeline.map(t => t.ai_score * 100),
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                fill: true,
+                tension: 0.4, // Curvy lines for "Heartbeat" effect
+                pointRadius: 2
+            },
+            {
+                label: 'Consistency Pulse',
+                data: timeline.map(t => t.consistency * 100),
+                borderColor: '#10b981',
+                borderDash: [5, 5],
+                tension: 0.4,
+                pointRadius: 0
+            }
+        ]
+    };
+
+    const options = {
+        responsive: true,
+        plugins: {
+            legend: { position: 'top' },
+            tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+            y: { min: 0, max: 100, grid: { color: '#f3f4f6' } },
+            x: { grid: { display: false } }
+        }
+    };
+
+    return (
+        <div style={{ marginBottom: '2rem', padding: '1.5rem', background: '#fffafa', borderRadius: '12px', border: '1px solid #fee2e2' }}>
+            <h4 style={{ marginBottom: '1rem', color: '#b91c1c', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Activity size={18} /> Temporal Anomaly Detection
+            </h4>
+            <div style={{ height: '200px' }}>
+                <Line data={data} options={options} />
+            </div>
+        </div>
+    );
+};
 
 const VerdictCard = ({ result }) => {
     const [expanded, setExpanded] = useState(false);
@@ -136,122 +190,130 @@ const VerdictCard = ({ result }) => {
             </div>
 
             {/* 2. Visual Data Section */}
-            <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-                <div>
-                    <h4 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Forensic Signal Radar</h4>
-                    <div style={{ height: '200px' }}>
-                        <Radar data={radarData} options={radarOptions} />
-                    </div>
-                </div>
+            <div style={{ padding: '2rem' }}>
 
-                <div>
-                    <h4 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Detailed Risk Metrics</h4>
+                {/* 2a. Temporal Video Pulse (NEW) */}
+                {technical_stats.timeline && technical_stats.timeline.length > 0 && (
+                    <PulseChart timeline={technical_stats.timeline} />
+                )}
 
-                    {/* NEW: Quick Check Status Cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
-
-                        {/* Image Status Card */}
-                        <div style={{
-                            padding: '1rem',
-                            borderRadius: '8px',
-                            background: technical_stats.ai_prob > 0.5 ? '#fff5f5' : '#f0fff4',
-                            border: `1px solid ${technical_stats.ai_prob > 0.5 ? '#feb2b2' : '#9ae6b4'}`,
-                            textAlign: 'center'
-                        }}>
-                            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
-                                {technical_stats.ai_prob > 0.5 ? '🤖' : '📸'}
-                            </div>
-                            <div style={{ fontWeight: 700, color: technical_stats.ai_prob > 0.5 ? '#c53030' : '#2f855a', marginBottom: '0.25rem' }}>
-                                {technical_stats.ai_prob > 0.5 ? 'AI Generated' : 'Real Photo'}
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#718096' }}>
-                                Media Source
-                            </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+                    <div>
+                        <h4 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Forensic Signal Radar</h4>
+                        <div style={{ height: '200px' }}>
+                            <Radar data={radarData} options={radarOptions} />
                         </div>
-
-                        {/* Text Status Card */}
-                        <div style={{
-                            padding: '1rem',
-                            borderRadius: '8px',
-                            background: technical_stats.consistency < 0.28 ? '#fff5f5' : '#f0fff4',
-                            border: `1px solid ${technical_stats.consistency < 0.28 ? '#feb2b2' : '#9ae6b4'}`,
-                            textAlign: 'center'
-                        }}>
-                            <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
-                                {technical_stats.consistency < 0.28 ? '⚠️' : '✅'}
-                            </div>
-                            <div style={{ fontWeight: 700, color: technical_stats.consistency < 0.28 ? '#c53030' : '#2f855a', marginBottom: '0.25rem' }}>
-                                {technical_stats.consistency < 0.28 ? 'Misleading' : 'Accurate'}
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#718096' }}>
-                                Caption Match
-                            </div>
-                        </div>
-
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div>
+                        <h4 style={{ marginBottom: '1rem', color: 'var(--text-secondary)' }}>Detailed Risk Metrics</h4>
 
-                        {/* 1. AI Probability Metric */}
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                                <span>Synthetic Media Probability</span>
-                                <b>{(technical_stats.ai_prob * 100).toFixed(1)}%</b>
+                        {/* NEW: Quick Check Status Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '2rem' }}>
+
+                            {/* Image Status Card */}
+                            <div style={{
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                background: technical_stats.ai_prob > 0.5 ? '#fff5f5' : '#f0fff4',
+                                border: `1px solid ${technical_stats.ai_prob > 0.5 ? '#feb2b2' : '#9ae6b4'}`,
+                                textAlign: 'center'
+                            }}>
+                                <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
+                                    {technical_stats.ai_prob > 0.5 ? '🤖' : '📸'}
+                                </div>
+                                <div style={{ fontWeight: 700, color: technical_stats.ai_prob > 0.5 ? '#c53030' : '#2f855a', marginBottom: '0.25rem' }}>
+                                    {technical_stats.ai_prob > 0.5 ? 'AI Generated' : 'Real Photo'}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: '#718096' }}>
+                                    Media Source
+                                </div>
                             </div>
-                            <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${technical_stats.ai_prob * 100}%` }}
-                                    transition={{ duration: 1, ease: 'easeOut' }}
-                                    style={{
-                                        height: '100%',
-                                        background: technical_stats.ai_prob > 0.5 ? 'var(--risk-red)' : 'var(--safe-green)',
-                                        borderRadius: '4px'
-                                    }}
-                                />
+
+                            {/* Text Status Card */}
+                            <div style={{
+                                padding: '1rem',
+                                borderRadius: '8px',
+                                background: technical_stats.consistency < 0.28 ? '#fff5f5' : '#f0fff4',
+                                border: `1px solid ${technical_stats.consistency < 0.28 ? '#feb2b2' : '#9ae6b4'}`,
+                                textAlign: 'center'
+                            }}>
+                                <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
+                                    {technical_stats.consistency < 0.28 ? '⚠️' : '✅'}
+                                </div>
+                                <div style={{ fontWeight: 700, color: technical_stats.consistency < 0.28 ? '#c53030' : '#2f855a', marginBottom: '0.25rem' }}>
+                                    {technical_stats.consistency < 0.28 ? 'Misleading' : 'Accurate'}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: '#718096' }}>
+                                    Caption Match
+                                </div>
                             </div>
+
                         </div>
 
-                        {/* 2. Semantic Consistency Metric */}
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                                <span>Caption-Image Alignment</span>
-                                <b>{(technical_stats.consistency * 100).toFixed(1)}%</b>
-                            </div>
-                            <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${technical_stats.consistency * 100}%` }}
-                                    transition={{ duration: 1, ease: 'easeOut', delay: 0.2 }}
-                                    style={{
-                                        height: '100%',
-                                        background: technical_stats.consistency < 0.28 ? 'var(--risk-red)' : 'var(--safe-green)', // Updated threshold to 0.28
-                                        borderRadius: '4px'
-                                    }}
-                                />
-                            </div>
-                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-                        {/* 3. Global Context Metric (Heuristic) */}
-                        <div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
-                                <span>Context Verification</span>
-                                <b>{is_misinfo ? 'Low' : 'High'} Confidence</b>
+                            {/* 1. AI Probability Metric */}
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                                    <span>Synthetic Media Probability</span>
+                                    <b>{(technical_stats.ai_prob * 100).toFixed(1)}%</b>
+                                </div>
+                                <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${technical_stats.ai_prob * 100}%` }}
+                                        transition={{ duration: 1, ease: 'easeOut' }}
+                                        style={{
+                                            height: '100%',
+                                            background: technical_stats.ai_prob > 0.5 ? 'var(--risk-red)' : 'var(--safe-green)',
+                                            borderRadius: '4px'
+                                        }}
+                                    />
+                                </div>
                             </div>
-                            <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: is_misinfo ? '30%' : '90%' }}
-                                    transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
-                                    style={{
-                                        height: '100%',
-                                        background: is_misinfo ? '#ffc107' : '#17a2b8', // Yellow for low confidence, Blue for high
-                                        borderRadius: '4px'
-                                    }}
-                                />
-                            </div>
-                        </div>
 
+                            {/* 2. Semantic Consistency Metric */}
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                                    <span>Caption-Image Alignment</span>
+                                    <b>{(technical_stats.consistency * 100).toFixed(1)}%</b>
+                                </div>
+                                <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${technical_stats.consistency * 100}%` }}
+                                        transition={{ duration: 1, ease: 'easeOut', delay: 0.2 }}
+                                        style={{
+                                            height: '100%',
+                                            background: technical_stats.consistency < 0.28 ? 'var(--risk-red)' : 'var(--safe-green)', // Updated threshold to 0.28
+                                            borderRadius: '4px'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* 3. Global Context Metric (Heuristic) */}
+                            <div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                                    <span>Context Verification</span>
+                                    <b>{is_misinfo ? 'Low' : 'High'} Confidence</b>
+                                </div>
+                                <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: is_misinfo ? '30%' : '90%' }}
+                                        transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
+                                        style={{
+                                            height: '100%',
+                                            background: is_misinfo ? '#ffc107' : '#17a2b8', // Yellow for low confidence, Blue for high
+                                            borderRadius: '4px'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
                 </div>
             </div>

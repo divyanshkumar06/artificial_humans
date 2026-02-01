@@ -27,30 +27,49 @@ def analyze_post(image_path, text, use_defense=True):
     is_video = image_path.lower().endswith(('.mp4', '.mov', '.avi'))
     
     if is_video:
-        # VIDEO LOGIC: Extract 3 key frames
+        # VIDEO LOGIC: "Temporal Pulse" Analysis (1 Frame Per Second)
         cap = cv2.VideoCapture(image_path)
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        frame_indices = [0, total_frames // 2, max(0, total_frames - 1)] if total_frames > 0 else [0]
+        duration = total_frames / fps
+        
+        # Sample every 1 second (approximately)
+        sample_rate = int(fps) 
+        frame_indices = range(0, total_frames, sample_rate)
         
         f_scores = []
         c_scores = []
+        timeline_data = [] # Stores {time, score} for the frontend graph
         
         for idx in frame_indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ret, frame = cap.read()
             if ret:
+                timestamp = round(idx / fps, 2)
                 temp_path = f"temp_frame_{idx}.jpg"
                 cv2.imwrite(temp_path, frame)
                 
                 # Analyze frame
-                f_scores.append(fe.detect_synthetic(temp_path))
-                # FIX 1: Updated method name here
-                c_scores.append(ce.compute_consistency(temp_path, text))
+                frame_f_score = fe.detect_synthetic(temp_path)
+                frame_c_score = ce.compute_consistency(temp_path, text)
+                
+                f_scores.append(frame_f_score)
+                c_scores.append(frame_c_score)
+                
+                # Add to timeline
+                timeline_data.append({
+                    "time": timestamp,
+                    "ai_score": frame_f_score,
+                    "consistency": frame_c_score
+                })
                 
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
         
         cap.release()
+        
+        # Aggregation Logic
+        # Peak Risk: Max AI score (did we catch a glitch?)
         f_score = max(f_scores) if f_scores else 0.0
         c_score = sum(c_scores) / len(c_scores) if c_scores else 0.0
         analysis_path = image_path 
@@ -97,7 +116,8 @@ def analyze_post(image_path, text, use_defense=True):
         "technical_stats": {
             "consistency": round(c_score, 4),
             "ai_prob": round(f_score, 4),
-            "verdict_type": "Synthetic" if ai_generated else "OOC" if consistency_fail else "Clear"
+            "verdict_type": "Synthetic" if ai_generated else "OOC" if consistency_fail else "Clear",
+            "timeline": timeline_data if is_video else [] # Return temporal data
         }
     }
 def general_decision_logic(f_score, c_score, search_data, claim):
