@@ -1,16 +1,19 @@
 fastapi
 uvicorn
-streamlit
+python-multipart
+# AI Core
 torch
 torchvision
 transformers
+tf-keras
 openai-clip
+groq
+# Image Processing
 pillow
 opencv-python
-scipy
 numpy
+scipy
+# Utils
 python-dotenv
 requests
-google-generativeai
 scikit-learn
-python-multipart

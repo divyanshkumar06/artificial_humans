@@ -46,6 +46,7 @@ uploads/
 temp_downloads/
 simple_images/
 static/
+test_dataset/
 feedback_log.jsonl
 evaluation_metrics.json
 temp_output/

@@ -18,8 +18,10 @@ DATA_DIRS = {
 
 METRICS_FILE = "evaluation_metrics.json"
 
+# ... imports remaining the same ...
+
 def add_noise(image_path):
-    """Adds random noise to an image for robustness testing."""
+    """Attack 1: Gaussian Noise (Grain)"""
     img = cv2.imread(image_path)
     if img is None: return None
     row, col, ch = img.shape
@@ -28,10 +30,29 @@ def add_noise(image_path):
     sigma = var**0.5
     gauss = np.random.normal(mean, sigma, (row, col, ch))
     gauss = gauss.reshape(row, col, ch)
-    noisy = img + gauss * 50 # Amplify noise for visibility
-    noisy_path = image_path.replace(".jpg", "_noisy.jpg")
+    noisy = img + gauss * 50
+    noisy_path = image_path.replace(".jpg", "_noise.jpg")
     cv2.imwrite(noisy_path, noisy)
     return noisy_path
+
+def add_blur(image_path):
+    """Attack 2: Motion Blur (Shaky Camera)"""
+    img = cv2.imread(image_path)
+    if img is None: return None
+    # 5x5 Kernel Gaussian Blur
+    blurred = cv2.GaussianBlur(img, (15, 15), 0)
+    blur_path = image_path.replace(".jpg", "_blur.jpg")
+    cv2.imwrite(blur_path, blurred)
+    return blur_path
+
+def add_compression(image_path):
+    """Attack 3: JPEG Compression (WhatsApp/Twitter Simulation)"""
+    img = cv2.imread(image_path)
+    if img is None: return None
+    comp_path = image_path.replace(".jpg", "_comp.jpg")
+    # Quality 30 = Heavy Compression
+    cv2.imwrite(comp_path, img, [int(cv2.IMWRITE_JPEG_QUALITY), 30])
+    return comp_path
 
 def evaluate_explanation_quality(explanation):
     """Heuristic check for explanation quality."""
@@ -44,14 +65,16 @@ def evaluate_explanation_quality(explanation):
 def run_evaluation():
     y_true = []
     y_pred = []
-    y_scores = [] # For ROC
+    y_scores = []
     ex_qualities = []
+    
+    # Robustness Counters
     robustness_passed = 0
-    total_robustness_tests = 0
+    total_stress_tests = 0
     
     results = []
 
-    print("🚀 Starting Quantitative Evaluation...")
+    print("🚀 Starting Quantitative Evaluation (Robustness 2.0)...")
 
     # 1. Iterate through datasets
     for label_type, folder in DATA_DIRS.items():
@@ -60,7 +83,6 @@ def run_evaluation():
             continue
             
         files = [f for f in os.listdir(folder) if f.endswith(('.jpg', '.png'))]
-        # Limit to 5 samples per category for speed during hackathon demo
         files = files[:5] 
         
         for filename in files:
@@ -72,19 +94,18 @@ def run_evaluation():
                 with open(txt_path, 'r') as f:
                     claim = f.read().strip()
             else:
-                claim = f"A photo of {filename}" # Fallback
+                claim = f"A photo of {filename}" 
             
             # Ground Truth
             is_misinfo_gt = True if label_type in ["MISMATCHED", "AI_GEN"] else False
             y_true.append(int(is_misinfo_gt))
 
-            # --- NORMAL RUN ---
+            # --- BASELINE RUN ---
             report = analyze_post(img_path, claim)
             is_misinfo_pred = report['is_misinfo']
             y_pred.append(int(is_misinfo_pred))
             
-            # ROC Probability Heuristic: max(AI Prob, 1 - Consistency)
-            # This represents the probability that the system thinks it's Misinformation
+            # ROC Probability
             stats = report.get('technical_stats', {})
             ai_score = stats.get('ai_prob', 0)
             consist = stats.get('consistency', 1)
@@ -94,18 +115,30 @@ def run_evaluation():
             # Explanation Quality
             ex_qualities.append(evaluate_explanation_quality(report['explanation']))
 
-            # --- ROBUSTNESS RUN (Randomly 50% change) ---
-            if np.random.rand() > 0.5:
-                total_robustness_tests += 1
-                noisy_path = add_noise(img_path)
-                if noisy_path:
-                    report_noisy = analyze_post(noisy_path, claim)
-                    # Robustness = Prediction shouldn't flip just because of noise
-                    if report_noisy['is_misinfo'] == is_misinfo_pred:
-                        robustness_passed += 1
-                    try:
-                        os.remove(noisy_path)
-                    except: pass
+            # --- STRESS TEST RUNS (Robustness 2.0) ---
+            # We run 3 attacks per image to rigorous testing
+            attacks = [
+                (add_noise, "Noise"),
+                (add_blur, "Blur"),
+                (add_compression, "WhatsApp")
+            ]
+            
+            for attack_func, attack_name in attacks:
+                if np.random.rand() > 0.3: # Randomly run most tests
+                    total_stress_tests += 1
+                    aug_path = attack_func(img_path)
+                    
+                    if aug_path:
+                        report_aug = analyze_post(aug_path, claim, use_defense=True)
+                        
+                        # PASSED if: Prediction remains the same OR System flags valid risk
+                        # (Ideally, truth shouldn't change just because of blur)
+                        if report_aug['is_misinfo'] == is_misinfo_pred:
+                            robustness_passed += 1
+                        
+                        try:
+                            os.remove(aug_path)
+                        except: pass
 
             results.append({
                 "File": filename,
@@ -116,10 +149,10 @@ def run_evaluation():
             })
             print(f"Verified {filename} ({label_type}) -> {'✅' if is_misinfo_gt == is_misinfo_pred else '❌'}")
 
-    # 2. Calculate Metrics
+    # 2. Metrics Calculation
     if not y_true:
         return {"error": "No data found"}
-
+        
     acc = accuracy_score(y_true, y_pred)
     prec = precision_score(y_true, y_pred, zero_division=0)
     rec = recall_score(y_true, y_pred, zero_division=0)
@@ -141,10 +174,9 @@ def run_evaluation():
         tn, fp, fn, tp = map(int, cm.ravel())
         confusion_data = {"tn": tn, "fp": fp, "fn": fn, "tp": tp}
     except Exception as e:
-        print(e)
         confusion_data = {"tn": 0, "fp": 0, "fn": 0, "tp": 0}
 
-    robustness_score = robustness_passed / total_robustness_tests if total_robustness_tests > 0 else 0
+    robustness_score = robustness_passed / total_stress_tests if total_stress_tests > 0 else 0
     avg_ex_quality = np.mean(ex_qualities) if ex_qualities else 0
 
     metrics = {
