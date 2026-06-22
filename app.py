@@ -96,7 +96,7 @@ if page == "Live Analysis":
             if is_synthetic or is_mismatch or is_factual_risk:
                 st.error("🚨 HIGH RISK DETECTED")
             else:
-                st.success("✅ LIKELY AUTHENTIC")
+                st.success("✅ LIKELY MATCH")
 
             with st.expander("📄 Forensic Evidence Report", expanded=True):
                 st.markdown(res['explanation'])

@@ -88,7 +88,7 @@ const VerdictCard = ({ result }) => {
     // Design Logic
     const theme = is_misinfo
         ? { bg: 'var(--risk-bg)', color: 'var(--risk-red)', icon: AlertTriangle, title: 'HIGH RISK DETECTED' }
-        : { bg: 'var(--safe-bg)', color: 'var(--safe-green)', icon: CheckCircle, title: 'LIKELY AUTHENTIC' };
+        : { bg: 'var(--safe-bg)', color: 'var(--safe-green)', icon: CheckCircle, title: 'LIKELY MATCH' };
 
     // PDF Export Logic
     const downloadPDF = async () => {
